@@ -1,0 +1,283 @@
+/* SecureVault+ Styles */
+
+/* Quick Menu Modal */
+.securevault-quick-menu {
+	padding: 20px;
+	min-width: 450px;
+	max-width: 600px;
+}
+
+.securevault-title {
+	text-align: center;
+	margin-bottom: 20px;
+	font-size: 1.5em;
+	color: var(--text-accent);
+}
+
+.securevault-summary {
+	background: var(--background-secondary);
+	padding: 15px;
+	border-radius: 8px;
+	margin-bottom: 20px;
+	display: flex;
+	justify-content: space-around;
+	flex-wrap: wrap;
+	gap: 10px;
+	border: 1px solid var(--background-modifier-border);
+}
+
+.summary-item {
+	font-weight: 600;
+	font-size: 1em;
+	padding: 5px 10px;
+	text-align: center;
+}
+
+.summary-item.locked {
+	color: var(--text-error);
+}
+
+.summary-item.unlocked {
+	color: var(--text-success);
+}
+
+.securevault-footer {
+	margin-top: 20px;
+	padding-top: 15px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.securevault-footer strong {
+	display: block;
+	margin-bottom: 8px;
+	color: var(--text-accent);
+}
+
+.securevault-footer div {
+	margin: 4px 0;
+	font-size: 0.9em;
+}
+
+.securevault-tip {
+	font-style: italic;
+	opacity: 0.7;
+	display: block;
+	margin-top: 10px;
+}
+
+/* Help Section */
+.securevault-help {
+	background: var(--background-secondary);
+	padding: 12px;
+	border-radius: 6px;
+	border-left: 3px solid var(--text-accent);
+	margin: 10px 0;
+}
+
+.securevault-help strong {
+	display: block;
+	margin-bottom: 8px;
+	color: var(--text-accent);
+}
+
+.securevault-help div {
+	margin: 4px 0;
+	font-size: 0.9em;
+	color: var(--text-muted);
+}
+
+/* Folder Items with Status */
+.folder-item-encrypted .setting-item-description {
+	color: var(--text-error) !important;
+	font-weight: 500;
+}
+
+.folder-item-decrypted .setting-item-description {
+	color: var(--text-success) !important;
+	font-weight: 500;
+}
+
+/* Setting Items in Modal */
+.securevault-quick-menu .setting-item {
+	border: none;
+	padding: 10px;
+	margin-bottom: 5px;
+	border-radius: 5px;
+	transition: background-color 0.2s;
+}
+
+.securevault-quick-menu .setting-item:hover {
+	background-color: var(--background-secondary);
+}
+
+.securevault-quick-menu .setting-item-name {
+	font-weight: 600;
+	font-size: 1em;
+}
+
+.securevault-quick-menu .setting-item-description {
+	color: var(--text-muted);
+	font-size: 0.9em;
+}
+
+/* Buttons in Modal */
+.securevault-quick-menu button {
+	min-width: 100px;
+	padding: 6px 15px;
+	border-radius: 5px;
+	font-weight: 500;
+	cursor: pointer;
+	transition: all 0.2s;
+}
+
+.securevault-quick-menu button:hover {
+	transform: translateY(-1px);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.securevault-quick-menu button:active {
+	transform: translateY(0);
+}
+
+/* Button Color Styles */
+.unlock-btn {
+	background-color: var(--interactive-success) !important;
+	color: white !important;
+}
+
+.unlock-btn:hover {
+	opacity: 0.9;
+}
+
+.lock-btn {
+	background-color: var(--interactive-normal) !important;
+}
+
+.lock-btn:hover {
+	opacity: 0.8;
+}
+
+/* Status Bar Clickable */
+.status-bar-item.mod-clickable {
+	cursor: pointer;
+	transition: opacity 0.2s, background-color 0.2s;
+	padding: 0 10px;
+	border-radius: 3px;
+}
+
+.status-bar-item.mod-clickable:hover {
+	opacity: 0.8;
+	background-color: var(--background-modifier-hover);
+}
+
+/* Dividers */
+.securevault-quick-menu hr {
+	margin: 20px 0;
+	border: none;
+	border-top: 1px solid var(--background-modifier-border);
+	opacity: 0.5;
+}
+
+/* Section Headers */
+.securevault-quick-menu h3 {
+	font-size: 1.1em;
+	margin: 15px 0 10px 0;
+	color: var(--text-accent);
+	font-weight: 600;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+	.securevault-quick-menu {
+		padding: 15px;
+		min-width: unset;
+		width: 100%;
+	}
+	
+	.securevault-title {
+		font-size: 1.3em;
+	}
+	
+	.summary-item {
+		font-size: 0.95em;
+		flex: 1 1 calc(50% - 5px);
+	}
+	
+	.securevault-quick-menu button {
+		min-width: 80px;
+		font-size: 0.9em;
+	}
+	
+	.securevault-quick-menu .setting-item-name {
+		font-size: 0.95em;
+	}
+	
+	.securevault-quick-menu .setting-item-description {
+		font-size: 0.85em;
+	}
+	
+	.securevault-help div {
+		font-size: 0.85em;
+	}
+	
+	.securevault-footer div {
+		font-size: 0.85em;
+	}
+}
+
+/* Small Mobile */
+@media (max-width: 480px) {
+	.summary-item {
+		flex: 1 1 100%;
+	}
+	
+	.securevault-summary {
+		padding: 10px;
+	}
+}
+
+/* Dark/Light Theme Support */
+.theme-dark .securevault-summary {
+	background: var(--background-secondary);
+}
+
+.theme-light .securevault-summary {
+	background: var(--background-secondary);
+}
+
+.theme-dark .securevault-help {
+	background: var(--background-secondary);
+}
+
+.theme-light .securevault-help {
+	background: var(--background-secondary);
+}
+
+/* Animations */
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+		transform: translateY(-10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.securevault-quick-menu {
+	animation: fadeIn 0.3s ease-out;
+}
+
+/* Touch Friendly */
+@media (hover: none) and (pointer: coarse) {
+	.securevault-quick-menu button {
+		min-height: 40px;
+		padding: 8px 15px;
+	}
+	
+	.securevault-quick-menu .setting-item {
+		padding: 12px;
+		margin-bottom: 8px;
+	}
+}
