@@ -1,7 +1,7 @@
 {
 	"id": "securevault-plus",
 	"name": "SecureVault+",
-	"version": "1.0.0",
+	"version": "1.4.0",
 	"minAppVersion": "0.15.0",
 	"description": "AES-256 folder encryption for Obsidian. One password, secure vault, works everywhere - desktop & mobile.",
 	"author": "SecureVault Team",

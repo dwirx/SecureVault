@@ -9,6 +9,8 @@ export default class SecureVaultPlugin extends Plugin {
 	settings: SecureVaultSettings;
 	vaultManager: VaultManager;
 	private autoLockTimer: NodeJS.Timeout | null = null;
+	private isProcessing: boolean = false; // PERBAIKAN: Prevent multiple simultaneous operations
+	private statusBarUpdateTimer: NodeJS.Timeout | null = null; // PERBAIKAN: Debounce status bar updates
 
 	async onload() {
 		await this.loadSettings();
@@ -229,95 +231,143 @@ export default class SecureVaultPlugin extends Plugin {
 	}
 
 	async unlockSpecificFolder(folder: EncryptedFolder) {
+		// PERBAIKAN: Check if already processing
+		if (this.isProcessing) {
+			new Notice('⏳ Please wait, another operation is in progress...');
+			return;
+		}
+		
 		new PasswordModal(this.app, async (password) => {
-			// Detect real status first
-			const status = await this.vaultManager.detectFolderLockStatus(folder.path);
-			
-			if (!status.isLocked) {
-				new Notice('ℹ️ This folder is already unlocked!');
-				folder.isLocked = false;
-				await this.saveSettings();
-				this.refreshStatusBar();
-				return;
-			}
-			
-			new Notice(`🔓 UNLOCKING: "${folder.path}" + all subfolders...`);
-			const success = await this.vaultManager.decryptFolder(folder, password);
-			if (success) {
-				await this.saveSettings();
-				new Notice(`✅ Folder "${folder.path}" unlocked`);
+			this.isProcessing = true;
+			try {
+				// Detect real status first
+				const status = await this.vaultManager.detectFolderLockStatus(folder.path);
+				
+				if (!status.isLocked) {
+					new Notice('ℹ️ This folder is already unlocked!');
+					folder.isLocked = false;
+					await this.saveSettings();
+					this.refreshStatusBar();
+					return;
+				}
+				
+				new Notice(`🔓 UNLOCKING: "${folder.path}" + all subfolders...`);
+				const success = await this.vaultManager.decryptFolder(folder, password);
+				if (success) {
+					await this.saveSettings();
+					new Notice(`✅ Folder "${folder.path}" unlocked successfully!`, 3000);
+					this.refreshStatusBar();
+				}
+			} finally {
+				this.isProcessing = false;
 			}
 		}).open();
 	}
 
 	async lockSpecificFolder(folder: EncryptedFolder) {
+		// PERBAIKAN: Check if already processing
+		if (this.isProcessing) {
+			new Notice('⏳ Please wait, another operation is in progress...');
+			return;
+		}
+		
 		new PasswordModal(this.app, async (password) => {
-			// Detect real status first
-			const status = await this.vaultManager.detectFolderLockStatus(folder.path);
-			
-			if (status.isLocked) {
-				new Notice('ℹ️ This folder is already locked!');
-				folder.isLocked = true;
+			this.isProcessing = true;
+			try {
+				// Detect real status first
+				const status = await this.vaultManager.detectFolderLockStatus(folder.path);
+				
+				if (status.isLocked) {
+					new Notice('ℹ️ This folder is already locked!');
+					folder.isLocked = true;
+					await this.saveSettings();
+					this.refreshStatusBar();
+					return;
+				}
+				
+				new Notice(`🔒 LOCKING: "${folder.path}" + all subfolders...`);
+				await this.vaultManager.lockFolder(folder, password);
 				await this.saveSettings();
+				new Notice(`🔒 Folder "${folder.path}" locked successfully!`, 3000);
 				this.refreshStatusBar();
-				return;
+			} finally {
+				this.isProcessing = false;
 			}
-			
-			new Notice(`🔒 LOCKING: "${folder.path}" + all subfolders...`);
-			await this.vaultManager.lockFolder(folder, password);
-			await this.saveSettings();
-			new Notice(`🔒 Folder "${folder.path}" locked`);
 		}).open();
 	}
 
 	private async unlockAllFolders(password: string) {
-		const lockedFolders = this.settings.encryptedFolders.filter(f => f.isLocked);
-		if (lockedFolders.length === 0) {
-			new Notice('ℹ️ No locked folders to unlock.');
+		// PERBAIKAN: Check if already processing
+		if (this.isProcessing) {
+			new Notice('⏳ Please wait, another operation is in progress...');
 			return;
 		}
+		
+		this.isProcessing = true;
+		try {
+			const lockedFolders = this.settings.encryptedFolders.filter(f => f.isLocked);
+			if (lockedFolders.length === 0) {
+				new Notice('ℹ️ No locked folders to unlock.');
+				return;
+			}
 
-		let successCount = 0;
-		new Notice(`🔓 UNLOCKING ${lockedFolders.length} folder(s) + all subfolders...`);
+			let successCount = 0;
+			new Notice(`🔓 UNLOCKING ${lockedFolders.length} folder(s) + all subfolders...`);
 
-		for (const folder of this.settings.encryptedFolders) {
-			if (folder.isLocked) {
-				const success = await this.vaultManager.decryptFolder(folder, password);
-				if (success) {
-					successCount++;
+			for (const folder of this.settings.encryptedFolders) {
+				if (folder.isLocked) {
+					const success = await this.vaultManager.decryptFolder(folder, password);
+					if (success) {
+						successCount++;
+					}
 				}
 			}
-		}
 
-		await this.saveSettings();
-		
-		if (successCount > 0) {
-			this.settings.lastUnlockTime = Date.now();
-			new Notice(`✅ SUCCESS! Unlocked ${successCount} folder(s) (all subfolders decrypted)`, 5000);
-		} else {
-			new Notice('❌ FAILED! Wrong password or no folders to unlock.');
+			await this.saveSettings();
+			
+			if (successCount > 0) {
+				this.settings.lastUnlockTime = Date.now();
+				new Notice(`✅ SUCCESS! Unlocked ${successCount} folder(s) (all subfolders decrypted)`, 5000);
+				this.refreshStatusBar();
+			} else {
+				new Notice('❌ FAILED! Wrong password or no folders to unlock.');
+			}
+		} finally {
+			this.isProcessing = false;
 		}
 	}
 
 	private async lockAllFolders(password: string) {
-		const unlockedFolders = this.settings.encryptedFolders.filter(f => !f.isLocked);
-		if (unlockedFolders.length === 0) {
-			new Notice('ℹ️ No unlocked folders to lock. All are already locked!');
+		// PERBAIKAN: Check if already processing
+		if (this.isProcessing) {
+			new Notice('⏳ Please wait, another operation is in progress...');
 			return;
 		}
-
-		let successCount = 0;
-		new Notice(`🔒 LOCKING ${unlockedFolders.length} folder(s) + all subfolders...`);
-
-		for (const folder of this.settings.encryptedFolders) {
-			if (!folder.isLocked) {
-				await this.vaultManager.lockFolder(folder, password);
-				successCount++;
+		
+		this.isProcessing = true;
+		try {
+			const unlockedFolders = this.settings.encryptedFolders.filter(f => !f.isLocked);
+			if (unlockedFolders.length === 0) {
+				new Notice('ℹ️ No unlocked folders to lock. All are already locked!');
+				return;
 			}
-		}
 
-		await this.saveSettings();
-		new Notice(`✅ SUCCESS! Locked ${successCount} folder(s) (all subfolders encrypted)`, 5000);
+			let successCount = 0;
+			new Notice(`🔒 LOCKING ${unlockedFolders.length} folder(s) + all subfolders...`);
+
+			for (const folder of this.settings.encryptedFolders) {
+				if (!folder.isLocked) {
+					await this.vaultManager.lockFolder(folder, password);
+					successCount++;
+				}
+			}
+
+			await this.saveSettings();
+			new Notice(`✅ SUCCESS! Locked ${successCount} folder(s) (all subfolders encrypted)`, 5000);
+			this.refreshStatusBar();
+		} finally {
+			this.isProcessing = false;
+		}
 	}
 
 	private startAutoLockTimer() {
@@ -441,13 +491,20 @@ SecureVault/
 	}
 
 	refreshStatusBar() {
-		// Update status bar
-		const statusBars = document.querySelectorAll('.status-bar-item');
-		statusBars.forEach(bar => {
-			if (bar.textContent?.includes('🔐')) {
-				this.updateStatusBar(bar as HTMLElement);
-			}
-		});
+		// PERBAIKAN: Debounce status bar updates (max 1 update per second)
+		if (this.statusBarUpdateTimer) {
+			clearTimeout(this.statusBarUpdateTimer);
+		}
+		
+		this.statusBarUpdateTimer = setTimeout(() => {
+			// Update status bar
+			const statusBars = document.querySelectorAll('.status-bar-item');
+			statusBars.forEach(bar => {
+				if (bar.textContent?.includes('🔐')) {
+					this.updateStatusBar(bar as HTMLElement);
+				}
+			});
+		}, 1000); // Tunggu 1 detik sebelum update
 	}
 }
 
@@ -473,21 +530,22 @@ class QuickMenuModal extends Modal {
 			cls: 'securevault-title' 
 		});
 
-		// Status Summary with real-time detection
+		// Status Summary with real-time detection (tanpa save settings di sini!)
 		const summary = contentEl.createDiv('securevault-summary');
 		const totalFolders = this.plugin.settings.encryptedFolders.length;
 		
 		// Count real locked/unlocked by detecting actual file status
+		// PERBAIKAN: Simpan status di memori saja, jangan save settings berulang kali
 		let realLockedCount = 0;
+		const folderStatuses = new Map<string, any>();
+		
 		for (const folder of this.plugin.settings.encryptedFolders) {
 			const status = await this.plugin.vaultManager.detectFolderLockStatus(folder.path);
+			folderStatuses.set(folder.path, status);
 			if (status.isLocked) {
 				realLockedCount++;
 			}
-			// Update folder status
-			folder.isLocked = status.isLocked;
 		}
-		await this.plugin.saveSettings();
 		
 		const realUnlockedCount = totalFolders - realLockedCount;
 
@@ -576,8 +634,8 @@ class QuickMenuModal extends Modal {
 			contentEl.createEl('hr');
 			contentEl.createEl('h3', { text: '📁 Your Encrypted Folders' });
 
-			// Render folders with real-time detection
-			await this.renderFolderList(contentEl);
+			// Render folders dengan folderStatuses yang sudah dikumpulkan
+			await this.renderFolderList(contentEl, folderStatuses);
 		}
 
 		// Footer
@@ -594,17 +652,31 @@ class QuickMenuModal extends Modal {
 		});
 	}
 
-	async renderFolderList(containerEl: HTMLElement) {
-		// Folder List with real-time detection
+	async renderFolderList(containerEl: HTMLElement, folderStatuses: Map<string, any>) {
+		// PERBAIKAN: Gunakan folderStatuses yang sudah dikumpulkan di onOpen
+		// Update settings SATU KALI saja jika ada perubahan
+		let hasChanges = false;
+		
 		for (const folder of this.plugin.settings.encryptedFolders) {
-			// Detect REAL status from actual files
-			const realStatus = await this.plugin.vaultManager.detectFolderLockStatus(folder.path);
+			const realStatus = folderStatuses.get(folder.path);
+			if (!realStatus) continue;
 			
-			// Update folder status if different
+			// Check if status changed
 			if (folder.isLocked !== realStatus.isLocked) {
 				folder.isLocked = realStatus.isLocked;
-				await this.plugin.saveSettings();
+				hasChanges = true;
 			}
+		}
+		
+		// Save settings SATU KALI saja jika ada perubahan
+		if (hasChanges) {
+			await this.plugin.saveSettings();
+		}
+		
+		// Render UI
+		for (const folder of this.plugin.settings.encryptedFolders) {
+			const realStatus = folderStatuses.get(folder.path);
+			if (!realStatus) continue;
 			
 			const icon = realStatus.isLocked ? '🔒' : '🔓';
 			const statusText = realStatus.isLocked ? 'LOCKED (Encrypted)' : 'UNLOCKED (Decrypted)';
@@ -630,14 +702,16 @@ class QuickMenuModal extends Modal {
 					btn.setButtonText(realStatus.isLocked ? '🔓 Unlock' : '🔒 Lock')
 						.setClass(realStatus.isLocked ? 'unlock-btn' : 'lock-btn')
 						.onClick(async () => {
+							// PERBAIKAN: Tutup modal dulu, proses, lalu beri notifikasi
+							// JANGAN buka modal lagi otomatis (menghindari looping)
 							this.close();
 							if (realStatus.isLocked) {
 								await this.plugin.unlockSpecificFolder(folder);
+								new Notice('✅ Folder unlocked! Open menu again to see updated status.');
 							} else {
 								await this.plugin.lockSpecificFolder(folder);
+								new Notice('✅ Folder locked! Open menu again to see updated status.');
 							}
-							// Refresh menu after action
-							setTimeout(() => new QuickMenuModal(this.app, this.plugin).open(), 500);
 						});
 				});
 		}

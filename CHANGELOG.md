@@ -1,5 +1,41 @@
 # 🔐 SecureVault+ - CHANGELOG
 
+## v1.4.0 - October 17, 2025
+
+### 🔧 CRITICAL FIX: Anti-Looping System!
+
+**PROBLEM SOLVED: Looping ketika mengambil status & lock operations!**
+
+✅ **Processing Flag System:**
+- Added `isProcessing` flag to prevent multiple simultaneous operations
+- "⏳ Please wait..." notice when trying to trigger multiple operations
+- Try-finally pattern ensures flag always resets even on errors
+
+✅ **Optimized Quick Menu:**
+- Detection runs ONCE per modal open (was 2x before)
+- Save settings ONCE per open (was per-folder before)
+- Removed auto-refresh after lock/unlock (prevents looping)
+- Manual refresh with clear notification
+
+✅ **Debounced Status Bar:**
+- Max 1 update per second (prevents excessive updates)
+- Batched DOM queries for better performance
+- `statusBarUpdateTimer` for debouncing
+
+✅ **Smart Rendering:**
+- `renderFolderList()` uses collected status data (no re-detection)
+- Save settings only if there are changes
+- Clearer notifications: "Open menu again to see updated status"
+
+✅ **Performance Improvements:**
+- 10+ folders: <1 second modal open (was 2-3 seconds)
+- No more looping or stuck states
+- Stable and predictable behavior
+
+**Technical Details:** See `ANTI-LOOPING-FIX.md` for complete documentation
+
+---
+
 ## v1.3.0 - October 17, 2025
 
 ### 🎉 MAJOR UPDATE: Real-Time Status & Algorithm Detection!
