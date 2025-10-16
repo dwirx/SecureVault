@@ -1,20 +1,23 @@
 import { Notice, Plugin, TFolder, Modal, Setting } from 'obsidian';
 import { SecureVaultSettings, DEFAULT_SETTINGS, EncryptedFolder } from './src/types';
 import { VaultManager } from './src/vault-manager';
-import { PasswordModal, CreateFolderModal } from './src/modals';
+import { PasswordModal, CreateFolderModal, AccessLogModal } from './src/modals';
 import { SecureVaultSettingTab } from './src/settings-tab';
 import { CryptoService } from './src/crypto';
+import { AccessLogger } from './src/access-logger';
 
 export default class SecureVaultPlugin extends Plugin {
 	settings: SecureVaultSettings;
 	vaultManager: VaultManager;
+	accessLogger: AccessLogger;
 	private autoLockTimer: NodeJS.Timeout | null = null;
-	private isProcessing: boolean = false; // PERBAIKAN: Prevent multiple simultaneous operations
-	private statusBarUpdateTimer: NodeJS.Timeout | null = null; // PERBAIKAN: Debounce status bar updates
+	private isProcessing: boolean = false;
+	private statusBarUpdateTimer: NodeJS.Timeout | null = null;
 
 	async onload() {
 		await this.loadSettings();
 		this.vaultManager = new VaultManager(this.app);
+		this.accessLogger = new AccessLogger(this.settings);
 
 		// Set encryption algorithm from settings
 		CryptoService.setAlgorithm(this.settings.encryptionAlgorithm);
@@ -158,27 +161,31 @@ export default class SecureVaultPlugin extends Plugin {
 
 	// Public methods untuk dipanggil dari modal
 	createEncryptedFolderCommand() {
-		new CreateFolderModal(this.app, async (folderPath, password) => {
+		new CreateFolderModal(this.app, this.settings, async (folderPath: string, password: string) => {
 			new Notice(`🔄 Encrypting folder and all subfolders...`);
+			this.accessLogger.log('create', folderPath, false, 'Started encryption');
 			const encFolder = await this.vaultManager.createEncryptedFolder(folderPath, password);
 			if (encFolder) {
 				this.settings.encryptedFolders.push(encFolder);
 				await this.saveSettings();
+				this.accessLogger.log('create', folderPath, true, `Encrypted ${encFolder.encryptedFiles.length} files`);
 				new Notice(`✅ SUCCESS! Encrypted ${encFolder.encryptedFiles.length} file(s) in "${folderPath}" (including subfolders)`);
 				this.refreshStatusBar();
+			} else {
+				this.accessLogger.log('create', folderPath, false, 'Encryption failed');
 			}
 		}).open();
 	}
 
 	unlockAllCommand() {
-		new PasswordModal(this.app, async (password) => {
+		new PasswordModal(this.app, this.settings, async (password: string) => {
 			await this.unlockAllFolders(password);
 			this.refreshStatusBar();
 		}).open();
 	}
 
 	lockAllCommand() {
-		new PasswordModal(this.app, async (password) => {
+		new PasswordModal(this.app, this.settings, async (password: string) => {
 			await this.lockAllFolders(password);
 			this.refreshStatusBar();
 		}).open();
@@ -193,7 +200,7 @@ export default class SecureVaultPlugin extends Plugin {
 
 		const folder = activeFile.parent;
 		if (folder) {
-			new PasswordModal(this.app, async (password) => {
+			new PasswordModal(this.app, this.settings, async (password: string) => {
 				const alreadyEncrypted = this.settings.encryptedFolders.some(f => f.path === folder.path);
 				if (alreadyEncrypted) {
 					new Notice('⚠️ This folder is already encrypted! Use Unlock to decrypt it.');
@@ -212,7 +219,7 @@ export default class SecureVaultPlugin extends Plugin {
 
 	// Encrypt folder from context menu (right-click)
 	async encryptFolderFromContextMenu(folder: TFolder) {
-		new PasswordModal(this.app, async (password) => {
+		new PasswordModal(this.app, this.settings, async (password: string) => {
 			const alreadyEncrypted = this.settings.encryptedFolders.some(f => f.path === folder.path);
 			if (alreadyEncrypted) {
 				new Notice('⚠️ This folder is already encrypted! Use Unlock to decrypt it.');
@@ -237,7 +244,7 @@ export default class SecureVaultPlugin extends Plugin {
 			return;
 		}
 		
-		new PasswordModal(this.app, async (password) => {
+		new PasswordModal(this.app, this.settings, async (password: string) => {
 			this.isProcessing = true;
 			try {
 				// Detect real status first
@@ -251,12 +258,16 @@ export default class SecureVaultPlugin extends Plugin {
 					return;
 				}
 				
+				this.accessLogger.log('unlock', folder.path, false, 'Started unlocking');
 				new Notice(`🔓 UNLOCKING: "${folder.path}" + all subfolders...`);
 				const success = await this.vaultManager.decryptFolder(folder, password);
 				if (success) {
 					await this.saveSettings();
+					this.accessLogger.log('unlock', folder.path, true, `Unlocked ${folder.encryptedFiles.length} files`);
 					new Notice(`✅ Folder "${folder.path}" unlocked successfully!`, 3000);
 					this.refreshStatusBar();
+				} else {
+					this.accessLogger.log('unlock', folder.path, false, 'Wrong password');
 				}
 			} finally {
 				this.isProcessing = false;
@@ -271,7 +282,7 @@ export default class SecureVaultPlugin extends Plugin {
 			return;
 		}
 		
-		new PasswordModal(this.app, async (password) => {
+		new PasswordModal(this.app, this.settings, async (password: string) => {
 			this.isProcessing = true;
 			try {
 				// Detect real status first
@@ -285,9 +296,11 @@ export default class SecureVaultPlugin extends Plugin {
 					return;
 				}
 				
+				this.accessLogger.log('lock', folder.path, false, 'Started locking');
 				new Notice(`🔒 LOCKING: "${folder.path}" + all subfolders...`);
 				await this.vaultManager.lockFolder(folder, password);
 				await this.saveSettings();
+				this.accessLogger.log('lock', folder.path, true, `Locked ${folder.encryptedFiles.length} files`);
 				new Notice(`🔒 Folder "${folder.path}" locked successfully!`, 3000);
 				this.refreshStatusBar();
 			} finally {

@@ -1,5 +1,13 @@
 export type EncryptionAlgorithm = 'AES-256-GCM' | 'ChaCha20-Poly1305';
 
+export interface AccessLogEntry {
+	timestamp: number;
+	action: 'unlock' | 'lock' | 'create' | 'access';
+	folderPath: string;
+	success: boolean;
+	details?: string;
+}
+
 export interface SecureVaultSettings {
 	masterPasswordHash: string;
 	encryptedFolders: EncryptedFolder[];
@@ -9,7 +17,15 @@ export interface SecureVaultSettings {
 	lastUnlockTime: number;
 	backupEnabled: boolean;
 	backupInterval: number; // hours
-	encryptionAlgorithm: EncryptionAlgorithm; // NEW: Pilihan algoritma
+	encryptionAlgorithm: EncryptionAlgorithm;
+	// NEW FEATURES
+	enableAccessLog: boolean;
+	accessLogs: AccessLogEntry[];
+	maxAccessLogs: number;
+	enableKeyFile: boolean;
+	keyFilePath: string;
+	passwordMinLength: number;
+	requireStrongPassword: boolean;
 }
 
 export interface EncryptedFolder {
@@ -38,5 +54,13 @@ export const DEFAULT_SETTINGS: SecureVaultSettings = {
 	lastUnlockTime: 0,
 	backupEnabled: true,
 	backupInterval: 24,
-	encryptionAlgorithm: 'AES-256-GCM' // Default algorithm
+	encryptionAlgorithm: 'AES-256-GCM',
+	// NEW FEATURES DEFAULTS
+	enableAccessLog: true,
+	accessLogs: [],
+	maxAccessLogs: 100,
+	enableKeyFile: false,
+	keyFilePath: '',
+	passwordMinLength: 8,
+	requireStrongPassword: true
 };

@@ -1,5 +1,7 @@
-import { App, PluginSettingTab, Setting } from 'obsidian';
+import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
 import SecureVaultPlugin from '../main';
+import { AccessLogModal } from './modals';
+import { generateKeyFile } from './utils';
 
 export class SecureVaultSettingTab extends PluginSettingTab {
 	plugin: SecureVaultPlugin;
@@ -57,6 +59,146 @@ export class SecureVaultSettingTab extends PluginSettingTab {
 		note.style.fontSize = '0.9em';
 		note.style.color = 'var(--text-warning)';
 		note.innerHTML = '⚠️ <strong>Important:</strong> This setting only affects NEW encrypted folders. Existing folders automatically use their original algorithm (auto-detected on decrypt).';
+
+		containerEl.createEl('hr');
+
+		// ======= PASSWORD SECURITY SECTION =======
+		containerEl.createEl('h3', { text: '🔑 Password Security' });
+
+		new Setting(containerEl)
+			.setName('Minimum password length')
+			.setDesc('Minimum characters required for passwords (8-64)')
+			.addText(text => text
+				.setPlaceholder('8')
+				.setValue(String(this.plugin.settings.passwordMinLength))
+				.onChange(async (value) => {
+					const len = parseInt(value);
+					if (!isNaN(len) && len >= 8 && len <= 64) {
+						this.plugin.settings.passwordMinLength = len;
+						await this.plugin.saveSettings();
+					}
+				}));
+
+		new Setting(containerEl)
+			.setName('Require strong passwords')
+			.setDesc('Enforce strong password requirements (uppercase, lowercase, numbers, symbols)')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.requireStrongPassword)
+				.onChange(async (value) => {
+					this.plugin.settings.requireStrongPassword = value;
+					await this.plugin.saveSettings();
+				}));
+
+		// ======= KEY FILE SECTION =======
+		containerEl.createEl('h3', { text: '🔐 Key File (Two-Factor Encryption)' });
+
+		new Setting(containerEl)
+			.setName('Enable key file support')
+			.setDesc('Require a key file in addition to password (two-factor encryption)')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableKeyFile)
+				.onChange(async (value) => {
+					this.plugin.settings.enableKeyFile = value;
+					await this.plugin.saveSettings();
+					this.display(); // Refresh to show/hide key file options
+				}));
+
+		if (this.plugin.settings.enableKeyFile) {
+			new Setting(containerEl)
+				.setName('Key file path')
+				.setDesc(this.plugin.settings.keyFilePath 
+					? `Current: ${this.plugin.settings.keyFilePath}` 
+					: 'No key file set. Generate one below.')
+				.addButton(btn => btn
+					.setButtonText('📁 Choose Key File')
+					.onClick(async () => {
+						// In a real implementation, this would open a file picker
+						new Notice('⚠️ Use the "Generate Key File" button to create a new key file');
+					}))
+				.addButton(btn => btn
+					.setButtonText('🎲 Generate Key File')
+					.setCta()
+					.onClick(async () => {
+						const keyContent = generateKeyFile();
+						const fileName = `securevault-key-${Date.now()}.key`;
+						
+						try {
+							// Save to vault root
+							await this.app.vault.create(fileName, keyContent);
+							this.plugin.settings.keyFilePath = fileName;
+							await this.plugin.saveSettings();
+							
+							new Notice(`✅ Key file generated: ${fileName}\n⚠️ BACKUP THIS FILE! Loss = permanent data loss!`, 10000);
+							this.display();
+						} catch (error) {
+							new Notice(`❌ Failed to generate key file: ${error.message}`);
+						}
+					}));
+
+			if (this.plugin.settings.keyFilePath) {
+				new Setting(containerEl)
+					.setName('Clear key file')
+					.setDesc('⚠️ Remove key file requirement (you will NOT be able to unlock existing folders encrypted with key file!)')
+					.addButton(btn => btn
+						.setButtonText('Clear')
+						.setWarning()
+						.onClick(async () => {
+							this.plugin.settings.keyFilePath = '';
+							await this.plugin.saveSettings();
+							new Notice('⚠️ Key file cleared. Existing encrypted folders may become inaccessible!');
+							this.display();
+						}));
+			}
+		}
+
+		// ======= ACCESS LOG SECTION =======
+		containerEl.createEl('h3', { text: '📊 Access Logging' });
+
+		new Setting(containerEl)
+			.setName('Enable access logging')
+			.setDesc('Track all lock/unlock operations with timestamps')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.enableAccessLog)
+				.onChange(async (value) => {
+					this.plugin.settings.enableAccessLog = value;
+					await this.plugin.saveSettings();
+					this.display();
+				}));
+
+		if (this.plugin.settings.enableAccessLog) {
+			new Setting(containerEl)
+				.setName('Maximum log entries')
+				.setDesc('Keep last N log entries (older entries auto-deleted)')
+				.addText(text => text
+					.setPlaceholder('100')
+					.setValue(String(this.plugin.settings.maxAccessLogs))
+					.onChange(async (value) => {
+						const max = parseInt(value);
+						if (!isNaN(max) && max > 0 && max <= 10000) {
+							this.plugin.settings.maxAccessLogs = max;
+							await this.plugin.saveSettings();
+						}
+					}));
+
+			new Setting(containerEl)
+				.setName('View access logs')
+				.setDesc(`Current logs: ${this.plugin.settings.accessLogs.length} entries`)
+				.addButton(btn => btn
+					.setButtonText('📖 View Logs')
+					.setCta()
+					.onClick(() => {
+						new AccessLogModal(this.app, this.plugin.settings).open();
+					}))
+				.addButton(btn => btn
+					.setButtonText('🗑️ Clear All Logs')
+					.setWarning()
+					.onClick(async () => {
+						this.plugin.settings.accessLogs = [];
+						await this.plugin.saveSettings();
+						new Notice('✅ All access logs cleared');
+						this.display();
+					}));
+		}
 
 		containerEl.createEl('hr');
 
