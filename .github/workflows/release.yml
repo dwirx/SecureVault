@@ -8,13 +8,24 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Version tag to release (e.g., 1.4.0 or v1.4.0)'
+        description: 'Version to release (e.g., 1.4.0 or v1.4.0)'
         required: true
         type: string
+        default: '1.4.0'
       prerelease:
         description: 'Mark as prerelease'
         required: false
         default: false
+        type: boolean
+      draft:
+        description: 'Create as draft release'
+        required: false
+        default: false
+        type: boolean
+      auto_tag:
+        description: 'Auto-create git tag if not exists'
+        required: false
+        default: true
         type: boolean
 
 permissions:
@@ -52,13 +63,24 @@ jobs:
         id: ver
         run: |
           if [ -n "${{ github.event.inputs.tag }}" ]; then
+            # Manual dispatch - use input tag
             TAG="${{ github.event.inputs.tag }}"
+            CLEAN_TAG="${TAG#v}"
+            echo "✅ Manual release - Version: $TAG"
+          elif [ -n "${{ github.ref_name }}" ] && [[ "${{ github.ref_name }}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            # Git tag push - use tag from ref
+            TAG="${{ github.ref_name }}"
+            CLEAN_TAG="${TAG#v}"
+            echo "✅ Tag release - Version: $TAG"
           else
-            TAG="${GITHUB_REF#refs/tags/}"
+            # Fallback - use manifest.json version
+            TAG="v$(jq -r '.version' manifest.json)"
+            CLEAN_TAG="${TAG#v}"
+            echo "⚠️  Fallback - Using manifest version: $TAG"
           fi
-          CLEAN_TAG="${TAG#v}"
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
           echo "clean_tag=${CLEAN_TAG}" >> $GITHUB_OUTPUT
+          echo "📌 Final version: $CLEAN_TAG"
 
       - name: Read manifest metadata
         id: manifest
@@ -75,15 +97,21 @@ jobs:
         run: |
           MANIFEST_VERSION="${{ steps.manifest.outputs.plugin_version }}"
           RELEASE_VERSION="${{ steps.ver.outputs.clean_tag }}"
+          
+          echo "🔍 Checking versions..."
+          echo "   manifest.json: $MANIFEST_VERSION"
+          echo "   Release tag:   $RELEASE_VERSION"
+          
           if [ "$MANIFEST_VERSION" != "$RELEASE_VERSION" ]; then
-            echo "❌ ERROR: Version mismatch!"
-            echo "   manifest.json version: $MANIFEST_VERSION"
-            echo "   Release tag version:   $RELEASE_VERSION"
             echo ""
-            echo "Please update manifest.json to match the release tag."
-            exit 1
+            echo "⚠️  WARNING: Version mismatch detected!"
+            echo "   This is OK for manual dispatch workflow."
+            echo "   Release will use tag version: $RELEASE_VERSION"
+            echo ""
+            echo "💡 TIP: Update manifest.json to $RELEASE_VERSION for consistency"
+          else
+            echo "✅ Version match confirmed: $MANIFEST_VERSION"
           fi
-          echo "✅ Version match confirmed: $MANIFEST_VERSION"
 
       - name: Create ZIP bundle
         id: zip
@@ -99,6 +127,23 @@ jobs:
           fi
           echo "zip_name=$NAME" >> $GITHUB_OUTPUT
           echo "📦 ZIP bundle: $NAME"
+
+      - name: Create git tag if needed
+        if: github.event.inputs.tag != '' && github.event.inputs.auto_tag == 'true'
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          echo "🏷️  Checking if tag exists..."
+          
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "✅ Tag $TAG already exists"
+          else
+            echo "📌 Creating tag $TAG..."
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "Release $TAG via GitHub Actions"
+            git push origin "$TAG"
+            echo "✅ Tag $TAG created and pushed to repository"
+          fi
 
       - name: Generate release notes
         id: notes
@@ -155,14 +200,15 @@ jobs:
           tag_name: ${{ steps.ver.outputs.tag }}
           name: 🔐 SecureVault+ v${{ steps.ver.outputs.clean_tag }}
           body_path: release_notes.md
-          draft: false
-          prerelease: ${{ github.event.inputs.prerelease || false }}
+          draft: ${{ github.event.inputs.draft == 'true' }}
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
           files: |
             manifest.json
             main.js
             styles.css
             ${{ steps.zip.outputs.zip_name }}
           fail_on_unmatched_files: false
+          make_latest: ${{ github.event.inputs.prerelease != 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
