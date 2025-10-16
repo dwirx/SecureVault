@@ -1,9 +1,55 @@
 import { App, Notice, TFile, TFolder } from 'obsidian';
 import { CryptoService } from './crypto';
-import { EncryptedFolder, EncryptedFileMetadata } from './types';
+import { EncryptedFolder, EncryptedFileMetadata, EncryptionAlgorithm } from './types';
 
 export class VaultManager {
 	constructor(private app: App) {}
+
+	// Detect actual lock status by checking files
+	async detectFolderLockStatus(folderPath: string): Promise<{ isLocked: boolean; algorithm: EncryptionAlgorithm | 'Mixed' | 'Unknown' }> {
+		const folder = this.app.vault.getAbstractFileByPath(folderPath);
+		
+		if (!(folder instanceof TFolder)) {
+			return { isLocked: false, algorithm: 'Unknown' };
+		}
+
+		const files = this.getAllFilesInFolder(folder, true);
+		let encryptedCount = 0;
+		let decryptedCount = 0;
+		const algorithms = new Set<EncryptionAlgorithm>();
+
+		for (const file of files) {
+			if (file.extension === 'md') {
+				const content = await this.app.vault.read(file);
+				
+				if (this.isFileEncrypted(content)) {
+					encryptedCount++;
+					// Detect algorithm from file
+					const metadata = CryptoService.decodeFileContent(content);
+					if (metadata) {
+						algorithms.add(metadata.algorithm);
+					}
+				} else {
+					decryptedCount++;
+				}
+			}
+		}
+
+		// Determine lock status
+		const isLocked = encryptedCount > 0;
+		
+		// Determine algorithm
+		let algorithm: EncryptionAlgorithm | 'Mixed' | 'Unknown';
+		if (algorithms.size === 0) {
+			algorithm = 'Unknown';
+		} else if (algorithms.size === 1) {
+			algorithm = Array.from(algorithms)[0];
+		} else {
+			algorithm = 'Mixed';
+		}
+
+		return { isLocked, algorithm };
+	}
 
 	async encryptFolder(folder: TFolder, password: string, recursive: boolean = true): Promise<EncryptedFolder> {
 		const files = this.getAllFilesInFolder(folder, recursive);

@@ -1,3 +1,5 @@
+export type EncryptionAlgorithm = 'AES-256-GCM' | 'ChaCha20-Poly1305';
+
 export interface SecureVaultSettings {
 	masterPasswordHash: string;
 	encryptedFolders: EncryptedFolder[];
@@ -7,6 +9,7 @@ export interface SecureVaultSettings {
 	lastUnlockTime: number;
 	backupEnabled: boolean;
 	backupInterval: number; // hours
+	encryptionAlgorithm: EncryptionAlgorithm; // NEW: Pilihan algoritma
 }
 
 export interface EncryptedFolder {
@@ -20,7 +23,7 @@ export interface EncryptedFolder {
 }
 
 export interface EncryptedFileMetadata {
-	algorithm: 'AES-256-GCM';
+	algorithm: EncryptionAlgorithm;
 	salt: string;
 	iv: string;
 	content: string;
@@ -34,5 +37,6 @@ export const DEFAULT_SETTINGS: SecureVaultSettings = {
 	enableBiometric: false,
 	lastUnlockTime: 0,
 	backupEnabled: true,
-	backupInterval: 24
+	backupInterval: 24,
+	encryptionAlgorithm: 'AES-256-GCM' // Default algorithm
 };

@@ -14,6 +14,9 @@ export default class SecureVaultPlugin extends Plugin {
 		await this.loadSettings();
 		this.vaultManager = new VaultManager(this.app);
 
+		// Set encryption algorithm from settings
+		CryptoService.setAlgorithm(this.settings.encryptionAlgorithm);
+
 		// Buat folder SecureVault otomatis jika belum ada
 		await this.ensureSecureVaultFolder();
 
@@ -227,7 +230,18 @@ export default class SecureVaultPlugin extends Plugin {
 
 	async unlockSpecificFolder(folder: EncryptedFolder) {
 		new PasswordModal(this.app, async (password) => {
-			new Notice(`� UNLOCKING: "${folder.path}" + all subfolders...`);
+			// Detect real status first
+			const status = await this.vaultManager.detectFolderLockStatus(folder.path);
+			
+			if (!status.isLocked) {
+				new Notice('ℹ️ This folder is already unlocked!');
+				folder.isLocked = false;
+				await this.saveSettings();
+				this.refreshStatusBar();
+				return;
+			}
+			
+			new Notice(`🔓 UNLOCKING: "${folder.path}" + all subfolders...`);
 			const success = await this.vaultManager.decryptFolder(folder, password);
 			if (success) {
 				await this.saveSettings();
@@ -238,7 +252,18 @@ export default class SecureVaultPlugin extends Plugin {
 
 	async lockSpecificFolder(folder: EncryptedFolder) {
 		new PasswordModal(this.app, async (password) => {
-			new Notice(`� LOCKING: "${folder.path}" + all subfolders...`);
+			// Detect real status first
+			const status = await this.vaultManager.detectFolderLockStatus(folder.path);
+			
+			if (status.isLocked) {
+				new Notice('ℹ️ This folder is already locked!');
+				folder.isLocked = true;
+				await this.saveSettings();
+				this.refreshStatusBar();
+				return;
+			}
+			
+			new Notice(`🔒 LOCKING: "${folder.path}" + all subfolders...`);
 			await this.vaultManager.lockFolder(folder, password);
 			await this.saveSettings();
 			new Notice(`🔒 Folder "${folder.path}" locked`);
@@ -435,31 +460,56 @@ class QuickMenuModal extends Modal {
 		this.plugin = plugin;
 	}
 
-	onOpen() {
+	async onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.addClass('securevault-quick-menu');
 
-		// Title
-		contentEl.createEl('h2', { text: '🔐 SecureVault+', cls: 'securevault-title' });
+		// Title with current algorithm
+		const selectedAlgorithm = this.plugin.settings.encryptionAlgorithm;
+		const algoIcon = selectedAlgorithm === 'ChaCha20-Poly1305' ? '🚀' : '🔐';
+		contentEl.createEl('h2', { 
+			text: `${algoIcon} SecureVault+`, 
+			cls: 'securevault-title' 
+		});
 
-		// Status Summary
+		// Status Summary with real-time detection
 		const summary = contentEl.createDiv('securevault-summary');
 		const totalFolders = this.plugin.settings.encryptedFolders.length;
-		const lockedCount = this.plugin.settings.encryptedFolders.filter(f => f.isLocked).length;
-		const unlockedCount = totalFolders - lockedCount;
+		
+		// Count real locked/unlocked by detecting actual file status
+		let realLockedCount = 0;
+		for (const folder of this.plugin.settings.encryptedFolders) {
+			const status = await this.plugin.vaultManager.detectFolderLockStatus(folder.path);
+			if (status.isLocked) {
+				realLockedCount++;
+			}
+			// Update folder status
+			folder.isLocked = status.isLocked;
+		}
+		await this.plugin.saveSettings();
+		
+		const realUnlockedCount = totalFolders - realLockedCount;
 
 		summary.createEl('div', { 
 			text: `📊 Total: ${totalFolders} folders`,
 			cls: 'summary-item'
 		});
 		summary.createEl('div', { 
-			text: `🔒 Locked: ${lockedCount}`,
+			text: `🔒 Locked: ${realLockedCount}`,
 			cls: 'summary-item locked'
 		});
 		summary.createEl('div', { 
-			text: `🔓 Unlocked: ${unlockedCount}`,
+			text: `🔓 Unlocked: ${realUnlockedCount}`,
 			cls: 'summary-item unlocked'
+		});
+		
+		// Current algorithm indicator
+		const defaultAlgorithm = this.plugin.settings.encryptionAlgorithm;
+		const algoText = defaultAlgorithm === 'ChaCha20-Poly1305' ? '🚀 ChaCha20' : '🔐 AES-256';
+		summary.createEl('div', { 
+			text: `Default: ${algoText}`,
+			cls: 'summary-item algo'
 		});
 
 		// Divider
@@ -521,33 +571,13 @@ class QuickMenuModal extends Modal {
 			helpDiv.createEl('div', { text: '• Click "Unlock" to DECRYPT files (make them readable)' });
 			helpDiv.createEl('div', { text: '• Click "Lock" to ENCRYPT files (make them unreadable)' });
 			helpDiv.createEl('div', { text: '• All subfolders are included automatically!' });
+			helpDiv.createEl('div', { text: '• Status & Algorithm detected in REAL-TIME! ✅' });
 			
 			contentEl.createEl('hr');
 			contentEl.createEl('h3', { text: '📁 Your Encrypted Folders' });
 
-			// Folder List
-			this.plugin.settings.encryptedFolders.forEach(folder => {
-				const icon = folder.isLocked ? '🔒' : '🔓';
-				const status = folder.isLocked ? 'LOCKED (Encrypted)' : 'UNLOCKED (Decrypted)';
-				const statusColor = folder.isLocked ? 'encrypted' : 'decrypted';
-				
-				new Setting(contentEl)
-					.setName(`${icon} ${folder.path}`)
-					.setDesc(`${folder.encryptedFiles.length} files • Status: ${status}`)
-					.setClass(`folder-item-${statusColor}`)
-					.addButton(btn => {
-						btn.setButtonText(folder.isLocked ? '🔓 Unlock' : '🔒 Lock')
-							.setClass(folder.isLocked ? 'unlock-btn' : 'lock-btn')
-							.onClick(async () => {
-								this.close();
-								if (folder.isLocked) {
-									await this.plugin.unlockSpecificFolder(folder);
-								} else {
-									await this.plugin.lockSpecificFolder(folder);
-								}
-							});
-					});
-			});
+			// Render folders with real-time detection
+			await this.renderFolderList(contentEl);
 		}
 
 		// Footer
@@ -562,6 +592,55 @@ class QuickMenuModal extends Modal {
 			text: '🔐 AES-256 Encryption • All operations include subfolders',
 			cls: 'securevault-tip'
 		});
+	}
+
+	async renderFolderList(containerEl: HTMLElement) {
+		// Folder List with real-time detection
+		for (const folder of this.plugin.settings.encryptedFolders) {
+			// Detect REAL status from actual files
+			const realStatus = await this.plugin.vaultManager.detectFolderLockStatus(folder.path);
+			
+			// Update folder status if different
+			if (folder.isLocked !== realStatus.isLocked) {
+				folder.isLocked = realStatus.isLocked;
+				await this.plugin.saveSettings();
+			}
+			
+			const icon = realStatus.isLocked ? '🔒' : '🔓';
+			const statusText = realStatus.isLocked ? 'LOCKED (Encrypted)' : 'UNLOCKED (Decrypted)';
+			const statusColor = realStatus.isLocked ? 'encrypted' : 'decrypted';
+			
+			// Algorithm display with emoji
+			let algoDisplay = '';
+			if (realStatus.algorithm === 'AES-256-GCM') {
+				algoDisplay = '🔐 AES-256';
+			} else if (realStatus.algorithm === 'ChaCha20-Poly1305') {
+				algoDisplay = '🚀 ChaCha20';
+			} else if (realStatus.algorithm === 'Mixed') {
+				algoDisplay = '🔀 Mixed';
+			} else {
+				algoDisplay = '❓ Unknown';
+			}
+			
+			new Setting(containerEl)
+				.setName(`${icon} ${folder.path}`)
+				.setDesc(`${folder.encryptedFiles.length} files • Status: ${statusText} • ${algoDisplay}`)
+				.setClass(`folder-item-${statusColor}`)
+				.addButton(btn => {
+					btn.setButtonText(realStatus.isLocked ? '🔓 Unlock' : '🔒 Lock')
+						.setClass(realStatus.isLocked ? 'unlock-btn' : 'lock-btn')
+						.onClick(async () => {
+							this.close();
+							if (realStatus.isLocked) {
+								await this.plugin.unlockSpecificFolder(folder);
+							} else {
+								await this.plugin.lockSpecificFolder(folder);
+							}
+							// Refresh menu after action
+							setTimeout(() => new QuickMenuModal(this.app, this.plugin).open(), 500);
+						});
+				});
+		}
 	}
 
 	onClose() {

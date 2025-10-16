@@ -15,6 +15,51 @@ export class SecureVaultSettingTab extends PluginSettingTab {
 
 		containerEl.createEl('h2', { text: '⚙️ SecureVault+ Settings' });
 
+		// Encryption Algorithm Selection
+		new Setting(containerEl)
+			.setName('🔐 Encryption Algorithm')
+			.setDesc('Choose encryption algorithm for new encrypted folders. Existing folders keep their algorithm.')
+			.addDropdown(dropdown => dropdown
+				.addOption('AES-256-GCM', 'AES-256-GCM (Standard, Recommended)')
+				.addOption('ChaCha20-Poly1305', 'ChaCha20-Poly1305 (Modern, Faster)')
+				.setValue(this.plugin.settings.encryptionAlgorithm)
+				.onChange(async (value) => {
+					this.plugin.settings.encryptionAlgorithm = value as 'AES-256-GCM' | 'ChaCha20-Poly1305';
+					await this.plugin.saveSettings();
+					// Update crypto service
+					const { CryptoService } = await import('./crypto');
+					CryptoService.setAlgorithm(this.plugin.settings.encryptionAlgorithm);
+				}));
+
+		// Algorithm Info
+		const algoInfo = containerEl.createDiv('algorithm-info');
+		algoInfo.style.backgroundColor = 'var(--background-secondary)';
+		algoInfo.style.padding = '15px';
+		algoInfo.style.borderRadius = '8px';
+		algoInfo.style.marginBottom = '20px';
+		algoInfo.style.borderLeft = '3px solid var(--text-accent)';
+		
+		algoInfo.createEl('p', { 
+			text: '📌 Algorithm Details:',
+			cls: 'setting-item-name'
+		});
+		
+		const ul = algoInfo.createEl('ul');
+		ul.style.marginLeft = '20px';
+		ul.style.fontSize = '0.9em';
+		ul.innerHTML = `
+			<li style="margin: 8px 0;"><strong>AES-256-GCM</strong>: Industry standard (NSA approved), widely supported, battle-tested security ✅</li>
+			<li style="margin: 8px 0;"><strong>ChaCha20-Poly1305</strong>: Modern cipher by Google, faster on mobile/low-power devices, used in TLS 1.3 🚀</li>
+		`;
+		
+		const note = algoInfo.createEl('p');
+		note.style.marginTop = '10px';
+		note.style.fontSize = '0.9em';
+		note.style.color = 'var(--text-warning)';
+		note.innerHTML = '⚠️ <strong>Important:</strong> This setting only affects NEW encrypted folders. Existing folders automatically use their original algorithm (auto-detected on decrypt).';
+
+		containerEl.createEl('hr');
+
 		new Setting(containerEl)
 			.setName('Auto-lock timeout')
 			.setDesc('Lock encrypted folders after inactivity (minutes)')
@@ -82,9 +127,16 @@ export class SecureVaultSettingTab extends PluginSettingTab {
 			});
 		} else {
 			this.plugin.settings.encryptedFolders.forEach(folder => {
+				// Get algorithm from first encrypted file
+				let folderAlgorithm = 'Unknown';
+				if (folder.encryptedFiles.length > 0) {
+					// We'll show the algorithm if we can detect it
+					folderAlgorithm = 'Mixed/Auto-detect';
+				}
+				
 				new Setting(containerEl)
 					.setName(folder.path)
-					.setDesc(`Status: ${folder.isLocked ? '🔒 Locked' : '🔓 Unlocked'} | Files: ${folder.encryptedFiles.length}`)
+					.setDesc(`Status: ${folder.isLocked ? '🔒 Locked' : '🔓 Unlocked'} | Files: ${folder.encryptedFiles.length} | Algorithm: Auto-detect`)
 					.addButton(btn => btn
 						.setButtonText('Remove')
 						.setWarning()

@@ -35,10 +35,21 @@
 
 .summary-item.locked {
 	color: var(--text-error);
+	font-weight: 700;
 }
 
 .summary-item.unlocked {
 	color: var(--text-success);
+	font-weight: 700;
+}
+
+.summary-item.algo {
+	background: var(--interactive-accent);
+	color: white;
+	border-radius: 5px;
+	padding: 5px 12px;
+	font-weight: 700;
+	font-size: 0.9em;
 }
 
 .securevault-footer {

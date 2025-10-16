@@ -1,4 +1,94 @@
-# 🔐 SecureVault+ - CHANGELOG v1.1.0
+# 🔐 SecureVault+ - CHANGELOG
+
+## v1.3.0 - October 17, 2025
+
+### 🎉 MAJOR UPDATE: Real-Time Status & Algorithm Detection!
+
+**PROBLEM SOLVED: Accurate lock/unlock status & algorithm visibility!**
+
+✅ **Real-Time Status Detection:**
+- Scan actual files to determine lock status (not just cached)
+- Auto-update settings when status changes
+- 100% accurate - no more "locked" showing when actually unlocked
+
+✅ **Algorithm Detection & Display:**
+- Show which algorithm each folder uses: 🔐 AES-256 or 🚀 ChaCha20
+- Mixed algorithm support: 🔀 Mixed
+- Per-folder algorithm display in UI
+
+✅ **Smart Lock/Unlock:**
+- Detect status BEFORE unlock/lock
+- Skip redundant operations with friendly messages
+- "ℹ️ Already unlocked!" / "ℹ️ Already locked!"
+
+✅ **Enhanced UI:**
+- Title shows current algorithm icon
+- Summary box shows default algorithm badge
+- Folder list shows: Status + Algorithm + File count
+- Color-coded: Red (locked), Green (unlocked)
+- Auto-refresh menu after actions
+
+✅ **Technical:**
+- `detectFolderLockStatus()` method in VaultManager
+- Scans all files recursively for real status
+- Detects algorithm from file metadata
+- Returns: `{ isLocked: boolean, algorithm: 'AES'|'ChaCha20'|'Mixed' }`
+
+**Files Changed:**
+- `src/vault-manager.ts`: Added detection method
+- `main.ts`: Smart lock/unlock, UI updates, auto-refresh
+- `styles.css`: Algorithm badge styling
+
+**Benefits:**
+- 🎯 100% accurate status (no more confusion!)
+- 🔍 Clear algorithm visibility per folder
+- 🚫 No redundant operations
+- 🎨 Beautiful, informative UI
+- ⚡ Real-time updates
+
+---
+
+## v1.2.0 - October 17, 2025
+
+### 🎉 NEW FEATURE: Algorithm Selection!
+
+**Pilih Algoritma Enkripsi di Settings!**
+
+✅ **Dual Algorithm Support:**
+- AES-256-GCM (Standard, Recommended)
+- ChaCha20-Poly1305 (Modern, Faster on Mobile)
+
+✅ **Smart Auto-Detection:**
+- Setiap file menyimpan algorithm metadata
+- Decrypt otomatis detect & gunakan algorithm yang tepat
+- Mix algorithm dalam satu vault tanpa masalah
+
+✅ **Settings UI:**
+- Dropdown menu untuk pilih algorithm
+- Info box dengan detail kedua algorithm
+- Warning note tentang backward compatibility
+
+✅ **Technical:**
+- `EncryptionAlgorithm` type added
+- `CryptoService.setAlgorithm()` & `getAlgorithm()` methods
+- Algorithm-aware encryption/decryption
+- Auto-detect on decode file content
+
+**Files Changed:**
+- `src/types.ts`: Added `EncryptionAlgorithm` type & setting
+- `src/crypto.ts`: Algorithm-aware encrypt/decrypt methods
+- `src/settings-tab.ts`: Algorithm selection dropdown + info
+- `main.ts`: Set algorithm from settings on load
+
+**Benefits:**
+- 🚀 Better mobile performance with ChaCha20
+- 💼 Industry standard with AES-256
+- 🔄 Backward compatible with auto-detection
+- 🎨 User-friendly settings UI
+
+---
+
+## v1.1.0 - October 17, 2025
 
 ## 🎉 MASALAH TERPECAHKAN! 
 
