@@ -1,4 +1,4 @@
-name: Release Plugin
+name: Release Obsidian Plugin
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Version tag to release (e.g., 1.2.3 or v1.2.3)'
+        description: 'Version tag to release (e.g., 1.4.0 or v1.4.0)'
         required: true
         type: string
       prerelease:
@@ -64,7 +64,26 @@ jobs:
         id: manifest
         run: |
           PLUGIN_ID=$(jq -r '.id' manifest.json)
+          PLUGIN_NAME=$(jq -r '.name' manifest.json)
+          PLUGIN_VERSION=$(jq -r '.version' manifest.json)
           echo "plugin_id=${PLUGIN_ID}" >> $GITHUB_OUTPUT
+          echo "plugin_name=${PLUGIN_NAME}" >> $GITHUB_OUTPUT
+          echo "plugin_version=${PLUGIN_VERSION}" >> $GITHUB_OUTPUT
+          echo "📦 Plugin: ${PLUGIN_NAME} v${PLUGIN_VERSION} (${PLUGIN_ID})"
+
+      - name: Validate version match
+        run: |
+          MANIFEST_VERSION="${{ steps.manifest.outputs.plugin_version }}"
+          RELEASE_VERSION="${{ steps.ver.outputs.clean_tag }}"
+          if [ "$MANIFEST_VERSION" != "$RELEASE_VERSION" ]; then
+            echo "❌ ERROR: Version mismatch!"
+            echo "   manifest.json version: $MANIFEST_VERSION"
+            echo "   Release tag version:   $RELEASE_VERSION"
+            echo ""
+            echo "Please update manifest.json to match the release tag."
+            exit 1
+          fi
+          echo "✅ Version match confirmed: $MANIFEST_VERSION"
 
       - name: Create ZIP bundle
         id: zip
@@ -73,16 +92,69 @@ jobs:
           # -j to junk paths so files are at root of the zip
           if [ -f styles.css ]; then
             zip -j "$NAME" manifest.json main.js styles.css
+            echo "✅ Created ZIP with styles.css"
           else
             zip -j "$NAME" manifest.json main.js
+            echo "✅ Created ZIP without styles.css"
           fi
           echo "zip_name=$NAME" >> $GITHUB_OUTPUT
+          echo "📦 ZIP bundle: $NAME"
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION="${{ steps.ver.outputs.clean_tag }}"
+          echo "Generating release notes for version $VERSION..."
+          
+          # Extract changelog for this version
+          if [ -f CHANGELOG.md ]; then
+            NOTES=$(awk "/## v${VERSION}/,/## v[0-9]/" CHANGELOG.md | sed '/## v[0-9]/d' | head -n -1)
+            if [ -z "$NOTES" ]; then
+              NOTES="Release version ${VERSION}"
+            fi
+          else
+            NOTES="Release version ${VERSION}"
+          fi
+          
+          # Create release notes file
+          cat << EOF > release_notes.md
+          ## 🔐 SecureVault+ v${VERSION}
+          
+          $NOTES
+          
+          ---
+          
+          ## 📦 Installation
+          
+          1. Download \`${{ steps.zip.outputs.zip_name }}\` or individual files below
+          2. Extract to \`<vault>/.obsidian/plugins/securevault-plus/\`
+          3. Reload Obsidian (Ctrl+R / Cmd+R)
+          4. Enable plugin in Settings → Community plugins
+          
+          ## 📋 Required Files
+          
+          - \`manifest.json\` - Plugin metadata
+          - \`main.js\` - Plugin code
+          - \`styles.css\` - UI styling (optional but recommended)
+          
+          ## 🔗 Documentation
+          
+          - [User Guide](https://github.com/${{ github.repository }}/blob/master/README.md)
+          - [Changelog](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md)
+          
+          ---
+          
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/v1.3.0...v${VERSION}
+          EOF
+          
+          echo "✅ Release notes generated"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
-          name: ${{ steps.ver.outputs.clean_tag }}
+          name: 🔐 SecureVault+ v${{ steps.ver.outputs.clean_tag }}
+          body_path: release_notes.md
           draft: false
           prerelease: ${{ github.event.inputs.prerelease || false }}
           files: |
@@ -90,5 +162,23 @@ jobs:
             main.js
             styles.css
             ${{ steps.zip.outputs.zip_name }}
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Release summary
+        run: |
+          echo "## 🎉 Release Published!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Plugin:** ${{ steps.manifest.outputs.plugin_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.ver.outputs.clean_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** ${{ steps.ver.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Prerelease:** ${{ github.event.inputs.prerelease || false }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- manifest.json" >> $GITHUB_STEP_SUMMARY
+          echo "- main.js" >> $GITHUB_STEP_SUMMARY
+          echo "- styles.css" >> $GITHUB_STEP_SUMMARY
+          echo "- ${{ steps.zip.outputs.zip_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.ver.outputs.tag }})" >> $GITHUB_STEP_SUMMARY
